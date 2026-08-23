@@ -4,10 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>🔒 核心資安驗證系統</title>
-    <!-- 【防封鎖更新】改用 Cloudflare 穩定的 CDN 連結，確保 100% 成功載入 Firebase -->
-    <script src="https://cloudflare.com"></script>
-    <script src="https://cloudflare.com"></script>
-    
+    <!-- 補回完全體 Firebase 核心元件（改用最不易被干擾的完整版連結） -->
+    <script src="https://gstatic.com"></script>
+    <script src="https://gstatic.com"></script>
     <link rel="stylesheet" href="https://unpkg.com" />
     <script src="https://unpkg.com"></script>
     <style>
@@ -62,32 +61,46 @@
         };
         // ============================================
 
-        firebase.initializeApp(firebaseConfig);
-        const db = firebase.database();
+        // 確保在初始化前，firebase 物件已經完全載入
+        if (typeof firebase !== 'undefined') {
+            firebase.initializeApp(firebaseConfig);
+            var db = firebase.database();
+        } else {
+            console.error("Firebase library failed to load from global network.");
+        }
+
         let userLat = 0; let userLng = 0;
 
         window.onload = function() {
-            db.ref('system_status').once('value', (snapshot) => {
-                const status = snapshot.val();
-                if (status && status.is_locked && Date.now() < status.lock_until) {
-                    document.getElementById("status").innerHTML = "<span style='color:red;'>⚠️ 系統正處於全面防禦鎖定中，請等候 30 分鐘！</span>";
-                    return;
-                }
-                if (navigator.geolocation) {
-                    navigator.geolocation.getCurrentPosition(
-                        (position) => {
-                            userLat = position.coords.latitude; userLng = position.coords.longitude;
-                            document.getElementById("status").innerText = "✅ GPS 實體定位稽核成功。密碼輸入框已解鎖。";
-                            document.getElementById("pwdInput").disabled = false; document.getElementById("loginBtn").disabled = false;
-                        },
-                        (error) => {
-                            document.getElementById("status").innerHTML = "<span style='color:red;'>❌ 安全阻擋：必須允許位置存取才能使用本系統。</span>";
-                        },
-                        { enableHighAccuracy: true, timeout: 10000 }
-                    );
-                }
-            });
+            if (typeof db !== 'undefined') {
+                db.ref('system_status').once('value', (snapshot) => {
+                    const status = snapshot.val();
+                    if (status && status.is_locked && Date.now() < status.lock_until) {
+                        document.getElementById("status").innerHTML = "<span style='color:red;'>⚠️ 系統正處於全面防禦鎖定中，請等候 30 分鐘！</span>";
+                        return;
+                    }
+                    triggerGeolocation();
+                });
+            } else {
+                triggerGeolocation();
+            }
         };
+
+        function triggerGeolocation() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        userLat = position.coords.latitude; userLng = position.coords.longitude;
+                        document.getElementById("status").innerText = "✅ GPS 實體定位稽核成功。密碼輸入框已解鎖。";
+                        document.getElementById("pwdInput").disabled = false; document.getElementById("loginBtn").disabled = false;
+                    },
+                    (error) => {
+                        document.getElementById("status").innerHTML = "<span style='color:red;'>❌ 安全阻擋：必須允許位置存取才能使用本系統。</span>";
+                    },
+                    { enableHighAccuracy: true, timeout: 10000 }
+                );
+            }
+        }
 
         function verifyPassword() {
             const inputPwd = document.getElementById("pwdInput").value;
@@ -137,7 +150,7 @@
             });
         }
 
-        void function emergencyUnlock() {
+        function emergencyUnlock() {
             db.ref('system_status').update({ failed_attempts: 0, is_locked: false, lock_until: 0 });
             alert("系統已成功重設！所有裝置限制已解除。"); window.location.reload();
         }
