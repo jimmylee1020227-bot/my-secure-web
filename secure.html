@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>🔒 核心資安驗證系統</title>
-    <!-- 使用完全穩定的 Cloudflare 鏡像庫，100% 防火牆免疫 -->
     <script src="https://cloudflare.com"></script>
     <script src="https://cloudflare.com"></script>
     <link rel="stylesheet" href="https://unpkg.com" />
@@ -24,14 +23,12 @@
     </style>
 </head>
 <body>
-
     <div class="box" id="loginBox">
         <h2>身分安全驗證</h2>
-        <p id="status">📡 正在初始化高精度 GPS 定位軌跡稽核...</p>
+        <p id="status">📡 正在安全校驗雲端加密防禦鏈結...</p>
         <input type="password" id="pwdInput" placeholder="請輸入安全存取密碼" disabled>
         <button id="loginBtn" onclick="verifyPassword()" disabled>驗證並解鎖系統</button>
     </div>
-
     <div class="box hidden" id="mainPage">
         <h2>📂 系統主頁 - 檔案下載區</h2>
         <p style="color: #00ff88;">驗證通過：一般使用者權限</p>
@@ -42,7 +39,6 @@
             </ul>
         </div>
     </div>
-
     <div class="box hidden" id="adminPage" style="max-width: 600px;">
         <h2>🛠️ 核心高階安全管理後台</h2>
         <p style="color: #ff3366;">驗證通過：管理員最高權限</p>
@@ -52,42 +48,40 @@
             <div id="map"></div>
         </div>
     </div>
-
-    <script>
-        // ======= 【完美保留您的真實安全憑證】 =======
+        <script>
         const firebaseConfig = {
             apiKey: "AIzaSyDx1-IbLq1-twOKWnyvIiQA8vUZGqvzD18",
             databaseURL: "https://firebasedatabase.app"
         };
-        // ===========================================
 
-        let db = null;
-        let userLat = 0; let userLng = 0;
+        let db = null; let userLat = 0; let userLng = 0;
 
         try {
             if (typeof firebase !== 'undefined') {
                 firebase.initializeApp(firebaseConfig);
                 db = firebase.database();
             }
-        } catch (e) { 
-            console.error("Firebase init fallback activation."); 
-        }
+        } catch (e) { console.error("Firebase init failed"); }
 
         window.onload = function() {
             if (db !== null && typeof db !== 'undefined') {
-                db.ref('system_status').on('value', (snapshot) => {
-                    const status = snapshot.val();
-                    if (status && status.is_locked && Date.now() < status.lock_until) {
-                        document.getElementById("status").innerHTML = "<span style='color:red;'>⚠️ 系統正處於全面防禦鎖定中，請等候 30 分鐘！</span>";
-                        document.getElementById("pwdInput").disabled = true;
-                        document.getElementById("loginBtn").disabled = true;
-                        return;
+                db.ref('system_status').once('value').then((snapshot) => {
+                    if (!snapshot.exists()) {
+                        db.ref('system_status').set({ failed_attempts: 0, is_locked: false, lock_until: 0 });
+                        db.ref('passwords').set({ admin: "admin999", main: "user123" });
                     }
-                    triggerGeolocation();
-                });
-            } else {
-                triggerGeolocation();
-            }
+                }).then(() => {
+                    db.ref('system_status').on('value', (snapshot) => {
+                        const status = snapshot.val();
+                        if (status && status.is_locked && Date.now() < status.lock_until) {
+                            document.getElementById("status").innerHTML = "<span style='color:red;'>⚠️ 系統正處於全面防禦鎖定中，請等候 30 分鐘！</span>";
+                            document.getElementById("pwdInput").disabled = true; document.getElementById("loginBtn").disabled = true;
+                            return;
+                        }
+                        triggerGeolocation();
+                    });
+                }).catch((err) => { triggerGeolocation(); });
+            } else { triggerGeolocation(); }
         };
 
         function triggerGeolocation() {
@@ -98,9 +92,7 @@
                         document.getElementById("status").innerText = "✅ GPS 實體定位稽核成功。密碼輸入框已解鎖。";
                         document.getElementById("pwdInput").disabled = false; document.getElementById("loginBtn").disabled = false;
                     },
-                    (error) => {
-                        document.getElementById("status").innerHTML = "<span style='color:red;'>❌ 安全阻擋：必須允許位置存取才能使用本系統。</span>";
-                    },
+                    (error) => { document.getElementById("status").innerHTML = "<span style='color:red;'>❌ 安全阻擋：必須允許位置存取才能使用本系統。</span>"; },
                     { enableHighAccuracy: true, timeout: 10000 }
                 );
             }
@@ -110,65 +102,55 @@
             const inputPwd = document.getElementById("pwdInput").value;
             if(!inputPwd || userLat === 0 || userLng === 0) return;
 
-            // 完美阻斷脫機卡死錯誤：如果雲端因任何極端環境阻斷，本地直接無縫降級對比
+            let targetAdmin = "admin999"; let targetMain = "user123"; let currentFailedAttempts = 0;
+
             if (db === null || typeof db === 'undefined') {
-                if (inputPwd === "admin999") {
-                    document.getElementById("loginBox").classList.add("hidden");
-                    document.getElementById("adminPage").classList.remove("hidden");
-                    loadHackerMap();
-                } else if (inputPwd === "user123") {
-                    document.getElementById("loginBox").classList.add("hidden");
-                    document.getElementById("mainPage").classList.remove("hidden");
-                } else {
-                    alert("資安防護模式提示：密碼不正確！");
-                }
+                executeBypassVerification(inputPwd, targetAdmin, targetMain);
                 return;
             }
 
-            db.ref().once('value', (snapshot) => {
+            db.ref().once('value').then((snapshot) => {
                 const data = snapshot.val();
-                const status = (data && data.system_status) ? data.system_status : { failed_attempts: 0, is_locked: false, lock_until: 0 };
-                const passwords = (data && data.passwords) ? data.passwords : { admin: "admin999", main: "user123" };
+                if (data && data.passwords) {
+                    targetAdmin = data.passwords.admin || "admin999";
+                    targetMain = data.passwords.main || "user123";
+                }
+                if (data && data.system_status) {
+                    currentFailedAttempts = Number(data.system_status.failed_attempts || 0);
+                }
 
-                if (status.is_locked && Date.now() < status.lock_until) { alert("系統全面防禦鎖定中！"); return; }
-
-                if (inputPwd === passwords.admin) {
+                if (inputPwd === targetAdmin) {
                     document.getElementById("loginBox").classList.add("hidden");
                     document.getElementById("adminPage").classList.remove("hidden");
                     loadHackerMap();
-                } else if (inputPwd === passwords.main) {
+                } else if (inputPwd === targetMain) {
                     document.getElementById("loginBox").classList.add("hidden");
                     document.getElementById("mainPage").classList.remove("hidden");
                 } else {
-                    let currentAttempts = Number(status.failed_attempts || 0) + 1;
-                    
+                    let updatedAttempts = currentFailedAttempts + 1;
                     let logRef = db.ref('attacker_logs').push();
-                    logRef.set({
-                        ip: "偵測中...",
-                        lat: userLat,
-                        lng: userLng,
-                        timestamp: Date.now()
-                    });
+                    logRef.set({ ip: "偵測中...", lat: userLat, lng: userLng, timestamp: Date.now() });
 
                     fetch('https://ipify.org')
-                    .then(res => res.json())
-                    .then(ipData => { logRef.update({ ip: ipData.ip }); })
-                    .catch(e => console.log("IP bypass"));
+                    .then(res => res.json()).then(ipData => { logRef.update({ ip: ipData.ip }); })
+                    .catch(e => { logRef.update({ ip: "VPN/防火牆環境" }); });
 
-                    if (currentAttempts >= 3) {
-                        db.ref('system_status').update({
-                            failed_attempts: currentAttempts,
-                            is_locked: true,
-                            lock_until: Date.now() + (30 * 60 * 1000)
-                        });
-                        document.getElementById("status").innerHTML = "<span style='color:red;'>⚠️ 密碼錯誤達 3 次！系統已啟動全面防禦鎖定 30 分鐘。</span>";
-                        document.getElementById("pwdInput").disabled = true; document.getElementById("loginBtn").disabled = true;
+                    if (updatedAttempts >= 3) {
+                        db.ref('system_status').update({ failed_attempts: updatedAttempts, is_locked: true, lock_until: Date.now() + (30 * 60 * 1000) }).then(() => { window.location.reload(); });
                     } else {
-                        db.ref('system_status').update({ failed_attempts: currentAttempts });
-                        document.getElementById("status").innerHTML = `<span style='color:red;'>❌ 密碼錯誤！剩餘次數：${3 - currentAttempts}次</span>`;
+                        db.ref('system_status').update({ failed_attempts: updatedAttempts });
+                        document.getElementById("status").innerHTML = `<span style='color:red;'>❌ 密碼錯誤！剩餘次數：${3 - updatedAttempts}次</span>`;
                     }
                 }
-            });
+            }).catch((err) => { executeBypassVerification(inputPwd, targetAdmin, targetMain); });
+        }
+
+        function executeBypassVerification(input, admin, main) {
+            if (input === admin) {
+                document.getElementById("loginBox").classList.add("hidden"); document.getElementById("adminPage").classList.remove("hidden"); loadHackerMap();
+            } else if (input === main) {
+                document.getElementById("loginBox").classList.add("hidden"); document.getElementById("mainPage").classList.remove("hidden");
+            } else { alert("防護提示：密碼不正確！"); }
         }
 
         function loadHackerMap() {
@@ -176,7 +158,7 @@
             var map = L.map('map').setView([userLat, userLng], 12);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
             if (db !== null && typeof db !== 'undefined') {
-                db.ref('attacker_logs').once('value', (snapshot) => {
+                db.ref('attacker_logs').once('value').then((snapshot) => {
                     if(snapshot.exists()) {
                         snapshot.forEach((childSnapshot) => {
                             const val = childSnapshot.val();
@@ -187,13 +169,12 @@
             }
         }
 
-        // 【修復完成】移除導致 JavaScript 全盤崩潰的 C++ 關鍵字 void
         function emergencyUnlock() {
             if (db !== null && typeof db !== 'undefined') {
-                db.ref('system_status').update({ failed_attempts: 0, is_locked: false, lock_until: 0 });
-            }
-            alert("系統已成功重設！所有裝置限制已解除。"); window.location.reload();
+                db.ref('system_status').update({ failed_attempts: 0, is_locked: false, lock_until: 0 }).then(() => { alert("系統已成功重設！限制已解除。"); window.location.reload(); });
+            } else { window.location.reload(); }
         }
     </script>
 </body>
 </html>
+
