@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>🔒 核心資安驗證系統</title>
-    <!-- 使用完全兼容的網路通訊庫 -->
+    <!-- 載入核心通訊元件 -->
     <script src="https://gstatic.com"></script>
     <script src="https://gstatic.com"></script>
     <link rel="stylesheet" href="https://unpkg.com" />
@@ -54,41 +54,36 @@
     </div>
 
     <script>
-        // ======= 【完美保留您的真實安全憑證】 =======
+        // ======= 【您的真實安全憑證】 =======
         const firebaseConfig = {
             apiKey: "AIzaSyDx1-IbLq1-twOKWnyvIiQA8vUZGqvzD18",
             databaseURL: "https://firebasedatabase.app"
         };
-        // ============================================
+        // ===================================
 
         let db;
         let userLat = 0; let userLng = 0;
 
-        // 核心載入保護機制
         try {
             if (typeof firebase !== 'undefined') {
                 firebase.initializeApp(firebaseConfig);
                 db = firebase.database();
             }
-        } catch (e) {
-            console.log("Firebase init bypass");
-        }
+        } catch (e) { console.log("Firebase init bypass"); }
 
         window.onload = function() {
             if (typeof db !== 'undefined' && db !== null) {
-                db.ref('system_status').once('value', (snapshot) => {
+                db.ref('system_status').on('value', (snapshot) => {
                     const status = snapshot.val();
                     if (status && status.is_locked && Date.now() < status.lock_until) {
                         document.getElementById("status").innerHTML = "<span style='color:red;'>⚠️ 系統正處於全面防禦鎖定中，請等候 30 分鐘！</span>";
+                        document.getElementById("pwdInput").disabled = true;
+                        document.getElementById("loginBtn").disabled = true;
                         return;
                     }
                     triggerGeolocation();
-                }, (error) => {
-                    triggerGeolocation(); // 遭遇防火牆攔截時強制降級執行定位
                 });
-            } else {
-                triggerGeolocation(); // 脫機狀態下強制執行定位
-            }
+            } else { triggerGeolocation(); }
         };
 
         function triggerGeolocation() {
@@ -96,16 +91,20 @@
                 navigator.geolocation.getCurrentPosition(
                     (position) => {
                         userLat = position.coords.latitude; userLng = position.coords.longitude;
-                        document.getElementById("status").innerText = "✅ GPS 實體定位稽核成功。密碼輸入框已解鎖。";
-                        document.getElementById("pwdInput").disabled = false; document.getElementById("loginBtn").disabled = false;
+                        // 二次雙重安全校驗：如果目前沒被鎖定，才解鎖輸入框
+                        db.ref('system_status').once('value', (snapshot) => {
+                            const status = snapshot.val();
+                            if (!(status && status.is_locked && Date.now() < status.lock_until)) {
+                                document.getElementById("status").innerText = "✅ GPS 實體定位稽核成功。密碼輸入框已解鎖。";
+                                document.getElementById("pwdInput").disabled = false; document.getElementById("loginBtn").disabled = false;
+                            }
+                        });
                     },
                     (error) => {
                         document.getElementById("status").innerHTML = "<span style='color:red;'>❌ 安全阻擋：必須允許位置存取才能使用本系統。</span>";
                     },
                     { enableHighAccuracy: true, timeout: 10000 }
                 );
-            } else {
-                document.getElementById("status").innerHTML = "<span style='color:red;'>❌ 瀏覽器不支援定位功能。</span>";
             }
         }
 
@@ -113,25 +112,11 @@
             const inputPwd = document.getElementById("pwdInput").value;
             if(!inputPwd || userLat === 0 || userLng === 0) return;
 
-            if (typeof db === 'undefined' || db === null) {
-                // 脫機安全降級機制
-                if (inputPwd === "admin999") {
-                    document.getElementById("loginBox").classList.add("hidden");
-                    document.getElementById("adminPage").classList.remove("hidden");
-                } else if (inputPwd === "user123") {
-                    document.getElementById("loginBox").classList.add("hidden");
-                    document.getElementById("mainPage").classList.remove("hidden");
-                } else {
-                    alert("密碼不正確！");
-                }
-                return;
-            }
-
             db.ref().once('value', (snapshot) => {
                 const data = snapshot.val();
                 const status = data.system_status;
 
-                if (status.is_locked && Date.now() < status.lock_until) { alert("系統鎖定中！"); return; }
+                if (status.is_locked && Date.now() < status.lock_until) { alert("系統全面防禦鎖定中！"); return; }
 
                 if (inputPwd === data.passwords.admin) {
                     document.getElementById("loginBox").classList.add("hidden");
@@ -141,42 +126,59 @@
                     document.getElementById("loginBox").classList.add("hidden");
                     document.getElementById("mainPage").classList.remove("hidden");
                 } else {
+                    // 【漏洞完美重構】完全移除阻斷依賴，立即執行本地累加與雲端打點
                     let currentAttempts = status.failed_attempts + 1;
-                    fetch('https://ipify.org').then(res => res.json()).then(ipData => {
-                        db.ref('attacker_logs').push({ ip: ipData.ip, lat: userLat, lng: userLng, timestamp: Date.now() });
-                        if (currentAttempts >= 3) {
-                            db.ref('system_status').update({ failed_attempts: currentAttempts, is_locked: true, lock_until: Date.now() + (30 * 60 * 1000) });
-                            document.getElementById("status").innerHTML = "<span style='color:red;'>⚠️ 密碼錯誤達 3 次！系統已啟動全面防禦鎖定 30 分鐘。</span>";
-                            document.getElementById("pwdInput").disabled = true; document.getElementById("loginBtn").disabled = true;
-                        } else {
-                            db.ref('system_status').update({ failed_attempts: currentAttempts });
-                            document.getElementById("status").innerHTML = `<span style='color:red;'>❌ 密碼錯誤！剩餘次數：${3 - currentAttempts}次</span>`;
-                        }
+                    
+                    // 1. 0x01秒內瞬間將侵入者 GPS 精確座標推送到 Firebase，確保留下證據
+                    let logRef = db.ref('attacker_logs').push();
+                    logRef.set({
+                        ip: "偵測中...", // 預設值，防止網路卡死
+                        lat: userLat,
+                        lng: userLng,
+                        timestamp: Date.now()
                     });
+
+                    // 2. 背景非同步抓取公網 IP，就算伺服器壞掉，也絕對不影響上面的 GPS 紀錄與鎖定
+                    fetch('https://ipify.org')
+                    .then(res => res.json())
+                    .then(ipData => {
+                        logRef.update({ ip: ipData.ip }); // 抓到後在背景補上 IP 資料
+                    }).catch(e => console.log("IP bypass"));
+
+                    // 3. 瞬間變更雲端狀態機，發動 30 分鐘鐵鎖防禦
+                    if (currentAttempts >= 3) {
+                        db.ref('system_status').update({
+                            failed_attempts: currentAttempts,
+                            is_locked: true,
+                            lock_until: Date.now() + (30 * 60 * 1000)
+                        });
+                        // 前端立刻死鎖介面
+                        document.getElementById("status").innerHTML = "<span style='color:red;'>⚠️ 密碼錯誤達 3 次！系統已啟動全面防禦鎖定 30 分鐘。</span>";
+                        document.getElementById("pwdInput").disabled = true; document.getElementById("loginBtn").disabled = true;
+                    } else {
+                        db.ref('system_status').update({ failed_attempts: currentAttempts });
+                        document.getElementById("status").innerHTML = `<span style='color:red;'>❌ 密碼錯誤！剩餘次數：${3 - currentAttempts}次</span>`;
+                    }
                 }
             });
         }
 
         function loadHackerMap() {
             document.getElementById("map").style.display = "block";
-            var map = L.map('map').setView([25.0339, 121.5645], 11);
+            var map = L.map('map').setView([userLat, userLng], 12);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-            if (typeof db !== 'undefined' && db !== null) {
-                db.ref('attacker_logs').once('value', (snapshot) => {
-                    if(snapshot.exists()) {
-                        snapshot.forEach((childSnapshot) => {
-                            const val = childSnapshot.val();
-                            L.marker([val.lat, val.lng]).addTo(map).bindPopup(`<b>侵入者 IP:</b> ${val.ip}<br><b>時間:</b> ${new Date(val.timestamp).toLocaleString()}`);
-                        });
-                    }
-                });
-            }
+            db.ref('attacker_logs').once('value', (snapshot) => {
+                if(snapshot.exists()) {
+                    snapshot.forEach((childSnapshot) => {
+                        const val = childSnapshot.val();
+                        L.marker([val.lat, val.lng]).addTo(map).bindPopup(`<b>侵入者 IP:</b> ${val.ip}<br><b>時間:</b> ${new Date(val.timestamp).toLocaleString()}`);
+                    });
+                }
+            });
         }
 
         function emergencyUnlock() {
-            if (typeof db !== 'undefined' && db !== null) {
-                db.ref('system_status').update({ failed_attempts: 0, is_locked: false, lock_until: 0 });
-            }
+            db.ref('system_status').update({ failed_attempts: 0, is_locked: false, lock_until: 0 });
             alert("系統已成功重設！所有裝置限制已解除。"); window.location.reload();
         }
     </script>
