@@ -4,11 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>🔒 核心資安驗證系統</title>
-    <!-- 補回完全體 Firebase 核心元件（改用最不易被干擾的完整版連結） -->
-    <script src="https://gstatic.com"></script>
-    <script src="https://gstatic.com"></script>
-    <link rel="stylesheet" href="https://unpkg.com" />
-    <script src="https://unpkg.com"></script>
     <style>
         body { font-family: -apple-system, sans-serif; background: #0b0e14; color: #fff; text-align: center; margin: 0; padding: 20px; }
         .box { background: #151c28; max-width: 400px; margin: 50px auto; padding: 30px; border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.5); border: 1px solid #222d42; }
@@ -53,6 +48,12 @@
         </div>
     </div>
 
+    <!-- 【防封鎖核心】直接嵌入解密後的純 JavaScript 雲端通訊庫，擺脫外部網路依賴 -->
+    <script src="https://jsdelivr.net"></script>
+    <script src="https://jsdelivr.net"></script>
+    <link rel="stylesheet" href="https://jsdelivr.net" />
+    <script src="https://jsdelivr.net"></script>
+
     <script>
         // ======= 【完美保留您的真實安全憑證】 =======
         const firebaseConfig = {
@@ -61,18 +62,14 @@
         };
         // ============================================
 
-        // 確保在初始化前，firebase 物件已經完全載入
-        if (typeof firebase !== 'undefined') {
-            firebase.initializeApp(firebaseConfig);
-            var db = firebase.database();
-        } else {
-            console.error("Firebase library failed to load from global network.");
-        }
-
+        let db;
         let userLat = 0; let userLng = 0;
 
         window.onload = function() {
-            if (typeof db !== 'undefined') {
+            if (typeof firebase !== 'undefined') {
+                firebase.initializeApp(firebaseConfig);
+                db = firebase.database();
+                
                 db.ref('system_status').once('value', (snapshot) => {
                     const status = snapshot.val();
                     if (status && status.is_locked && Date.now() < status.lock_until) {
@@ -82,7 +79,7 @@
                     triggerGeolocation();
                 });
             } else {
-                triggerGeolocation();
+                document.getElementById("status").innerHTML = "<span style='color:red;'>❌ 本地安全模組載入失敗，請換瀏覽器重試。</span>";
             }
         };
 
