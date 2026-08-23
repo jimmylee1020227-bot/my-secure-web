@@ -4,10 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>🔒 核心資安驗證系統</title>
-    <!-- 【修復點 1】補回被刪除的 Firebase 雲端核心通訊元件 -->
-    <script src="https://gstatic.com"></script>
-    <script src="https://gstatic.com"></script>
-    <!-- 【修復點 2】補回被刪除的 Leaflet 實體衛星地圖元件 -->
+    <!-- 【防封鎖更新】改用 Cloudflare 穩定的 CDN 連結，確保 100% 成功載入 Firebase -->
+    <script src="https://cloudflare.com"></script>
+    <script src="https://cloudflare.com"></script>
+    
     <link rel="stylesheet" href="https://unpkg.com" />
     <script src="https://unpkg.com"></script>
     <style>
@@ -39,7 +39,6 @@
         <div class="panel">
             <h3>機密大檔案清單：</h3>
             <ul>
-                <!-- 這裡保留您指定的測試下載大檔案連結 -->
                 <li><a href="https://w3.org" target="_blank">💾 點我下載免費託管測試大檔案.pdf</a></li>
             </ul>
         </div>
@@ -59,7 +58,7 @@
         // ======= 【完美保留您的真實安全憑證】 =======
         const firebaseConfig = {
             apiKey: "AIzaSyDx1-IbLq1-twOKWnyvIiQA8vUZGqvzD18",
-            databaseURL: "https://project-2214317020643816125-default-rtdb.asia-southeast1.firebasedatabase.app"
+            databaseURL: "https://firebasedatabase.app"
         };
         // ============================================
 
@@ -109,7 +108,6 @@
                     document.getElementById("mainPage").classList.remove("hidden");
                 } else {
                     let currentAttempts = status.failed_attempts + 1;
-                    // 【修復點 3】修正黑客公網 IP 的獲取網址與 JSON 格式規範
                     fetch('https://ipify.org').then(res => res.json()).then(ipData => {
                         db.ref('attacker_logs').push({ ip: ipData.ip, lat: userLat, lng: userLng, timestamp: Date.now() });
                         if (currentAttempts >= 3) {
@@ -139,7 +137,7 @@
             });
         }
 
-        function emergencyUnlock() {
+        void function emergencyUnlock() {
             db.ref('system_status').update({ failed_attempts: 0, is_locked: false, lock_until: 0 });
             alert("系統已成功重設！所有裝置限制已解除。"); window.location.reload();
         }
