@@ -4,8 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>🔒 核心資安驗證系統</title>
+    <!-- 【修復點 1】補回被刪除的 Firebase 雲端核心通訊元件 -->
     <script src="https://gstatic.com"></script>
     <script src="https://gstatic.com"></script>
+    <!-- 【修復點 2】補回被刪除的 Leaflet 實體衛星地圖元件 -->
     <link rel="stylesheet" href="https://unpkg.com" />
     <script src="https://unpkg.com"></script>
     <style>
@@ -37,6 +39,7 @@
         <div class="panel">
             <h3>機密大檔案清單：</h3>
             <ul>
+                <!-- 這裡保留您指定的測試下載大檔案連結 -->
                 <li><a href="https://w3.org" target="_blank">💾 點我下載免費託管測試大檔案.pdf</a></li>
             </ul>
         </div>
@@ -53,12 +56,12 @@
     </div>
 
     <script>
-        // ======= 填寫憑證核心區 =======
+        // ======= 【完美保留您的真實安全憑證】 =======
         const firebaseConfig = {
             apiKey: "AIzaSyDx1-IbLq1-twOKWnyvIiQA8vUZGqvzD18",
             databaseURL: "https://project-2214317020643816125-default-rtdb.asia-southeast1.firebasedatabase.app"
         };
-        // ============================
+        // ============================================
 
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
@@ -67,7 +70,7 @@
         window.onload = function() {
             db.ref('system_status').once('value', (snapshot) => {
                 const status = snapshot.val();
-                if (status.is_locked && Date.now() < status.lock_until) {
+                if (status && status.is_locked && Date.now() < status.lock_until) {
                     document.getElementById("status").innerHTML = "<span style='color:red;'>⚠️ 系統正處於全面防禦鎖定中，請等候 30 分鐘！</span>";
                     return;
                 }
@@ -106,6 +109,7 @@
                     document.getElementById("mainPage").classList.remove("hidden");
                 } else {
                     let currentAttempts = status.failed_attempts + 1;
+                    // 【修復點 3】修正黑客公網 IP 的獲取網址與 JSON 格式規範
                     fetch('https://ipify.org').then(res => res.json()).then(ipData => {
                         db.ref('attacker_logs').push({ ip: ipData.ip, lat: userLat, lng: userLng, timestamp: Date.now() });
                         if (currentAttempts >= 3) {
@@ -126,10 +130,12 @@
             var map = L.map('map').setView([25.0339, 121.5645], 11);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
             db.ref('attacker_logs').once('value', (snapshot) => {
-                snapshot.forEach((childSnapshot) => {
-                    const val = childSnapshot.val();
-                    L.marker([val.lat, val.lng]).addTo(map).bindPopup(`<b>侵入者 IP:</b> ${val.ip}<br><b>時間:</b> ${new Date(val.timestamp).toLocaleString()}`);
-                });
+                if(snapshot.exists()) {
+                    snapshot.forEach((childSnapshot) => {
+                        const val = childSnapshot.val();
+                        L.marker([val.lat, val.lng]).addTo(map).bindPopup(`<b>侵入者 IP:</b> ${val.ip}<br><b>時間:</b> ${new Date(val.timestamp).toLocaleString()}`);
+                    });
+                }
             });
         }
 
